@@ -50,11 +50,18 @@ public class InventoryService {
     public EventInventoryResponse getEventInventory(final Long eventId) {
         final Event event = eventRepository.findById(eventId).orElse(null);
 
+        if (event == null) {
+            // Log the error and throw an exception with a message
+            log.error("Event with ID {} not found", eventId);
+            throw new RuntimeException("Event not found with ID: " + eventId);
+        }
+
+
         return EventInventoryResponse.builder()
                 .event(event.getName())
                 .capacity(event.getLeftCapacity())
                 .venue(event.getVenue())
-                /*.ticketPrice(event.getTicketPrice())*/
+                .ticketPrice(event.getTicketPrice())
                 .eventId(event.getId())
                 .build();
     }

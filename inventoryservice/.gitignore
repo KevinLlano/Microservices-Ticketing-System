@@ -34,6 +34,9 @@ build/
 
 # Ignore application.properties
 inventoryservice/src/main/resources/application.properties
+application.properties
+src/main/resources/application.properties
+docker-compose.yml
 
 # Ignore Docker related files
 docker-compose.override.yml
