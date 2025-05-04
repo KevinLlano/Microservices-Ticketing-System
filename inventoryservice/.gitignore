@@ -32,11 +32,5 @@ build/
 ### VS Code ###
 .vscode/
 
-# Ignore application.properties
-inventoryservice/src/main/resources/application.properties
-application.properties
-src/main/resources/application.properties
-docker-compose.yml
-
-# Ignore Docker related files
-docker-compose.override.yml
+# Ignore application.properties for all services
+**/src/main/resources/application.properties
