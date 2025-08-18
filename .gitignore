@@ -33,6 +33,16 @@ aws-credentials
 secrets.yml
 secrets.yaml
 
+# Database passwords and connection strings
+application-*.properties
+application-*.yml
+database.properties
+
+# Jenkins and CI/CD secrets
+jenkins_home/
+.jenkins/
+credentials.xml
+
 # IDE and editor files
 .vscode/
 .idea/
@@ -52,9 +62,15 @@ secrets.yaml
 ehthumbs.db
 Thumbs.db
 
-# Logs
-logs/
+# Compiled class files
+*.class
+target/
+build/
+out/
+
+# Log files
 *.log
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

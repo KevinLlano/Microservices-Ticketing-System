@@ -1,120 +1,70 @@
 pipeline {
     agent any
+
+    options {
+        skipDefaultCheckout()
+        timestamps()
+    }
+
     environment {
-        DOCKER_CONFIG = '/tmp/.docker'
-        AWS_REGION = 'us-east-1'
-        ECR_REGISTRY = '442042522885.dkr.ecr.us-east-1.amazonaws.com'
-        registryCreds = 'ecr:us-east-1:awscreds'
+        // Simple local tags only for now; no AWS/ECR until configured
+        BUILD_TAG_BASE = "local"
     }
 
     stages {
-        stage('Docker Test') {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Verify Docker') {
             steps {
-                script {
-                    sh 'docker --version'
-                    sh 'docker ps'
-                }
+                sh 'docker --version'
+                sh 'docker ps -q >/dev/null || true'
             }
         }
 
-        stage('Build and Test Java Services') {
+        stage('Build JARs') {
             parallel {
-                stage('API Gateway') {
-                    steps {
-                        dir('apigateway') {
-                            sh 'chmod +x mvnw'
-                            sh './mvnw clean package -DskipTests'
-                        }
-                    }
+                stage('apigateway') {
+                    steps { dir('apigateway'){ sh './mvnw -B clean package -DskipTests' } }
                 }
-                stage('Booking Service') {
-                    steps {
-                        dir('bookingservice') {
-                            sh 'chmod +x mvnw'
-                            sh './mvnw clean package -DskipTests'
-                        }
-                    }
+                stage('bookingservice') {
+                    steps { dir('bookingservice'){ sh './mvnw -B clean package -DskipTests' } }
                 }
-                stage('Inventory Service') {
-                    steps {
-                        dir('inventoryservice') {
-                            sh 'chmod +x mvnw'
-                            sh './mvnw clean package -DskipTests'
-                        }
-                    }
+                stage('inventoryservice') {
+                    steps { dir('inventoryservice'){ sh './mvnw -B clean package -DskipTests' } }
                 }
-                stage('Order Service') {
-                    steps {
-                        dir('orderservice') {
-                            sh 'chmod +x mvnw'
-                            sh './mvnw clean package -DskipTests'
-                        }
-                    }
+                stage('orderservice') {
+                    steps { dir('orderservice'){ sh './mvnw -B clean package -DskipTests' } }
                 }
             }
         }
 
-        stage('Build Docker Images') {
+        stage('Build Docker Images (local only)') {
             parallel {
-                stage('Build API Gateway Image') {
-                    steps {
-                        script {
-                            sh 'mkdir -p /tmp/.docker'
-                            sh "docker build -t ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER} ./apigateway"
-                            sh "docker tag ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER} ${ECR_REGISTRY}/apigateway:latest"
-                        }
-                    }
+                stage('apigateway image') {
+                    steps { dir('apigateway'){ sh 'docker build -t apigateway:${BUILD_NUMBER} .' } }
                 }
-                stage('Build Booking Service Image') {
-                    steps {
-                        script {
-                            sh 'mkdir -p /tmp/.docker'
-                            sh "docker build -t ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER} ./bookingservice"
-                            sh "docker tag ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER} ${ECR_REGISTRY}/bookingservice:latest"
-                        }
-                    }
+                stage('bookingservice image') {
+                    steps { dir('bookingservice'){ sh 'docker build -t bookingservice:${BUILD_NUMBER} .' } }
                 }
-                stage('Build Inventory Service Image') {
-                    steps {
-                        script {
-                            sh 'mkdir -p /tmp/.docker'
-                            sh "docker build -t ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER} ./inventoryservice"
-                            sh "docker tag ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER} ${ECR_REGISTRY}/inventoryservice:latest"
-                        }
-                    }
+                stage('inventoryservice image') {
+                    steps { dir('inventoryservice'){ sh 'docker build -t inventoryservice:${BUILD_NUMBER} .' } }
                 }
-                stage('Build Order Service Image') {
-                    steps {
-                        script {
-                            sh 'mkdir -p /tmp/.docker'
-                            sh "docker build -t ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER} ./orderservice"
-                            sh "docker tag ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER} ${ECR_REGISTRY}/orderservice:latest"
-                        }
-                    }
+                stage('orderservice image') {
+                    steps { dir('orderservice'){ sh 'docker build -t orderservice:${BUILD_NUMBER} .' } }
                 }
             }
         }
 
-        stage('Push Docker Images to ECR') {
-            steps {
-                script {
-                    // Login to ECR
-                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+        // Future stage placeholder for pushing to ECR once credentials & repos exist
+        // stage('Push to ECR') { when { expression { return false } } steps { echo 'Configure AWS/ECR first.' } }
+    }
 
-                    // Push all images
-                    sh "docker push ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER}"
-                    sh "docker push ${ECR_REGISTRY}/apigateway:latest"
-
-                    sh "docker push ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER}"
-                    sh "docker push ${ECR_REGISTRY}/bookingservice:latest"
-
-                    sh "docker push ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER}"
-                    sh "docker push ${ECR_REGISTRY}/inventoryservice:latest"
-
-                    sh "docker push ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER}"
-                    sh "docker push ${ECR_REGISTRY}/orderservice:latest"
-                }
-            }
+    post {
+        success {
+            archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
         }
+        always { cleanWs() }
     }
 }

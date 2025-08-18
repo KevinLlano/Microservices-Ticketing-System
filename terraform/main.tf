@@ -1,40 +1,5 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "aws" {
-  region = var.aws_region
-}
-
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-  default     = "dev"
-}
-
-variable "vpc_id" {
-  description = "VPC ID where ECS will be deployed"
-  type        = string
-  # You'll need to replace this with your actual VPC ID
-  default = "vpc-xxxxxxxxx"
-}
-
-variable "subnet_ids" {
-  description = "Subnet IDs where ECS tasks will run"
-  type        = list(string)
-  # You'll need to replace these with your actual subnet IDs
-  default = ["subnet-xxxxxxxxx", "subnet-yyyyyyyyy"]
+  region = "eu-west-2"
 }
 
 # ECR Repositories for each microservice
@@ -74,57 +39,77 @@ resource "aws_ecr_repository" "orderservice" {
   }
 }
 
-# ECS Cluster
-resource "aws_ecs_cluster" "microservices_cluster" {
-  name = "microservices-${var.environment}"
+# VPC and Networking
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
 
-  configuration {
-    execute_command_configuration {
-      logging = "OVERRIDE"
-      log_configuration {
-        cloud_watch_log_group_name = aws_cloudwatch_log_group.ecs_logs.name
-      }
-    }
+  tags = {
+    Name = "microservices-vpc"
   }
 }
 
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/microservices-${var.environment}"
-  retention_in_days = 7
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "microservices-igw"
+  }
 }
 
-# Security Group for ECS tasks
+resource "aws_subnet" "public" {
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.${count.index + 1}.0/24"
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "public-subnet-${count.index + 1}"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "public-route-table"
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  count          = 2
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+# Security Group
 resource "aws_security_group" "ecs_tasks" {
-  name        = "ecs-tasks-${var.environment}"
-  description = "Security group for ECS tasks"
-  vpc_id      = var.vpc_id
+  name_prefix = "ecs-tasks-sg"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    protocol    = "tcp"
+    from_port   = 80
+    to_port     = 80
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     protocol    = "tcp"
     from_port   = 8080
     to_port     = 8080
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    protocol    = "tcp"
-    from_port   = 8081
-    to_port     = 8081
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    protocol    = "tcp"
-    from_port   = 8082
-    to_port     = 8082
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    protocol    = "tcp"
-    from_port   = 8083
-    to_port     = 8083
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -136,9 +121,19 @@ resource "aws_security_group" "ecs_tasks" {
   }
 }
 
-# IAM role for ECS tasks
+# ECS Cluster
+resource "aws_ecs_cluster" "microservices" {
+  name = "microservices-cluster"
+
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
+}
+
+# IAM Role for ECS Tasks
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole-${var.environment}"
+  name = "ecsTaskExecutionRole"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -146,10 +141,11 @@ resource "aws_iam_role" "ecs_task_execution_role" {
       {
         Action = "sts:AssumeRole"
         Effect = "Allow"
+        Sid    = ""
         Principal = {
           Service = "ecs-tasks.amazonaws.com"
         }
-      }
+      },
     ]
   })
 }
@@ -159,9 +155,51 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Task Definition for API Gateway
+# Application Load Balancer
+resource "aws_lb" "main" {
+  name               = "microservices-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.ecs_tasks.id]
+  subnets            = aws_subnet.public[*].id
+
+  enable_deletion_protection = false
+}
+
+resource "aws_lb_target_group" "apigateway" {
+  name     = "apigateway-tg"
+  port     = 8080
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = "3"
+    interval            = "30"
+    matcher             = "200"
+    path                = "/actuator/health"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = "5"
+    unhealthy_threshold = "2"
+  }
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.apigateway.arn
+  }
+}
+
+# ECS Task Definitions
 resource "aws_ecs_task_definition" "apigateway" {
-  family                   = "apigateway-${var.environment}"
+  family                   = "apigateway"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -177,24 +215,22 @@ resource "aws_ecs_task_definition" "apigateway" {
         {
           containerPort = 8080
           hostPort      = 8080
-          protocol      = "tcp"
         }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "apigateway"
+          awslogs-group         = "/ecs/apigateway"
+          awslogs-region        = "eu-west-2"
+          awslogs-stream-prefix = "ecs"
         }
       }
     }
   ])
 }
 
-# Task Definition for Booking Service
 resource "aws_ecs_task_definition" "bookingservice" {
-  family                   = "bookingservice-${var.environment}"
+  family                   = "bookingservice"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -208,26 +244,24 @@ resource "aws_ecs_task_definition" "bookingservice" {
       essential = true
       portMappings = [
         {
-          containerPort = 8081
-          hostPort      = 8081
-          protocol      = "tcp"
+          containerPort = 8080
+          hostPort      = 8080
         }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "bookingservice"
+          awslogs-group         = "/ecs/bookingservice"
+          awslogs-region        = "eu-west-2"
+          awslogs-stream-prefix = "ecs"
         }
       }
     }
   ])
 }
 
-# Task Definition for Inventory Service
 resource "aws_ecs_task_definition" "inventoryservice" {
-  family                   = "inventoryservice-${var.environment}"
+  family                   = "inventoryservice"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -241,26 +275,24 @@ resource "aws_ecs_task_definition" "inventoryservice" {
       essential = true
       portMappings = [
         {
-          containerPort = 8082
-          hostPort      = 8082
-          protocol      = "tcp"
+          containerPort = 8080
+          hostPort      = 8080
         }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "inventoryservice"
+          awslogs-group         = "/ecs/inventoryservice"
+          awslogs-region        = "eu-west-2"
+          awslogs-stream-prefix = "ecs"
         }
       }
     }
   ])
 }
 
-# Task Definition for Order Service
 resource "aws_ecs_task_definition" "orderservice" {
-  family                   = "orderservice-${var.environment}"
+  family                   = "orderservice"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
@@ -274,75 +306,103 @@ resource "aws_ecs_task_definition" "orderservice" {
       essential = true
       portMappings = [
         {
-          containerPort = 8083
-          hostPort      = 8083
-          protocol      = "tcp"
+          containerPort = 8080
+          hostPort      = 8080
         }
       ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = var.aws_region
-          "awslogs-stream-prefix" = "orderservice"
+          awslogs-group         = "/ecs/orderservice"
+          awslogs-region        = "eu-west-2"
+          awslogs-stream-prefix = "ecs"
         }
       }
     }
   ])
 }
 
+# CloudWatch Log Groups
+resource "aws_cloudwatch_log_group" "apigateway" {
+  name              = "/ecs/apigateway"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "bookingservice" {
+  name              = "/ecs/bookingservice"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "inventoryservice" {
+  name              = "/ecs/inventoryservice"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "orderservice" {
+  name              = "/ecs/orderservice"
+  retention_in_days = 30
+}
+
 # ECS Services
 resource "aws_ecs_service" "apigateway" {
-  name            = "apigateway-svc"
-  cluster         = aws_ecs_cluster.microservices_cluster.id
+  name            = "apigateway-service"
+  cluster         = aws_ecs_cluster.microservices.id
   task_definition = aws_ecs_task_definition.apigateway.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.subnet_ids
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.apigateway.arn
+    container_name   = "apigateway"
+    container_port   = 8080
+  }
+
+  depends_on = [aws_lb_listener.front_end]
 }
 
 resource "aws_ecs_service" "bookingservice" {
-  name            = "bookingservice-svc"
-  cluster         = aws_ecs_cluster.microservices_cluster.id
+  name            = "bookingservice-service"
+  cluster         = aws_ecs_cluster.microservices.id
   task_definition = aws_ecs_task_definition.bookingservice.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.subnet_ids
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
 }
 
 resource "aws_ecs_service" "inventoryservice" {
-  name            = "inventoryservice-svc"
-  cluster         = aws_ecs_cluster.microservices_cluster.id
+  name            = "inventoryservice-service"
+  cluster         = aws_ecs_cluster.microservices.id
   task_definition = aws_ecs_task_definition.inventoryservice.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.subnet_ids
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
 }
 
 resource "aws_ecs_service" "orderservice" {
-  name            = "orderservice-svc"
-  cluster         = aws_ecs_cluster.microservices_cluster.id
+  name            = "orderservice-service"
+  cluster         = aws_ecs_cluster.microservices.id
   task_definition = aws_ecs_task_definition.orderservice.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.subnet_ids
+    subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]
     assign_public_ip = true
   }
@@ -350,21 +410,14 @@ resource "aws_ecs_service" "orderservice" {
 
 # Outputs
 output "ecr_repositories" {
-  description = "ECR repository URLs"
   value = {
-    apigateway       = aws_ecr_repository.apigateway.repository_url
-    bookingservice   = aws_ecr_repository.bookingservice.repository_url
+    apigateway      = aws_ecr_repository.apigateway.repository_url
+    bookingservice  = aws_ecr_repository.bookingservice.repository_url
     inventoryservice = aws_ecr_repository.inventoryservice.repository_url
-    orderservice     = aws_ecr_repository.orderservice.repository_url
+    orderservice    = aws_ecr_repository.orderservice.repository_url
   }
 }
 
-output "ecs_cluster_name" {
-  description = "ECS cluster name"
-  value       = aws_ecs_cluster.microservices_cluster.name
-}
-
-output "ecs_cluster_arn" {
-  description = "ECS cluster ARN"
-  value       = aws_ecs_cluster.microservices_cluster.arn
+output "load_balancer_dns" {
+  value = aws_lb.main.dns_name
 }
