@@ -1,5 +1,5 @@
 pipeline {
-    agent none
+    agent any
     environment {
         DOCKER_CONFIG = '/tmp/.docker'
         AWS_REGION = 'us-east-1'
@@ -9,68 +9,45 @@ pipeline {
 
     stages {
         stage('Docker Test') {
-            agent {
-                docker {
-                    image 'docker:latest'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
             steps {
-                sh 'docker ps'
+                script {
+                    sh 'docker --version'
+                    sh 'docker ps'
+                }
             }
         }
 
         stage('Build and Test Java Services') {
             parallel {
                 stage('API Gateway') {
-                    agent {
-                        docker {
-                            image 'maven:3.8.4-openjdk-17'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         dir('apigateway') {
-                            sh 'mvn clean test package -DskipTests'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package -DskipTests'
                         }
                     }
                 }
                 stage('Booking Service') {
-                    agent {
-                        docker {
-                            image 'maven:3.8.4-openjdk-17'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         dir('bookingservice') {
-                            sh 'mvn clean test package -DskipTests'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package -DskipTests'
                         }
                     }
                 }
                 stage('Inventory Service') {
-                    agent {
-                        docker {
-                            image 'maven:3.8.4-openjdk-17'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         dir('inventoryservice') {
-                            sh 'mvn clean test package -DskipTests'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package -DskipTests'
                         }
                     }
                 }
                 stage('Order Service') {
-                    agent {
-                        docker {
-                            image 'maven:3.8.4-openjdk-17'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         dir('orderservice') {
-                            sh 'mvn clean test package -DskipTests'
+                            sh 'chmod +x mvnw'
+                            sh './mvnw clean package -DskipTests'
                         }
                     }
                 }
@@ -80,62 +57,38 @@ pipeline {
         stage('Build Docker Images') {
             parallel {
                 stage('Build API Gateway Image') {
-                    agent {
-                        docker {
-                            image 'docker:latest'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         script {
                             sh 'mkdir -p /tmp/.docker'
-                            def apigatewayImage = docker.build("${ECR_REGISTRY}/apigateway:$BUILD_NUMBER", "./apigateway")
-                            env.APIGATEWAY_IMAGE = "${ECR_REGISTRY}/apigateway:$BUILD_NUMBER"
+                            sh "docker build -t ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER} ./apigateway"
+                            sh "docker tag ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER} ${ECR_REGISTRY}/apigateway:latest"
                         }
                     }
                 }
                 stage('Build Booking Service Image') {
-                    agent {
-                        docker {
-                            image 'docker:latest'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         script {
                             sh 'mkdir -p /tmp/.docker'
-                            def bookingImage = docker.build("${ECR_REGISTRY}/bookingservice:$BUILD_NUMBER", "./bookingservice")
-                            env.BOOKING_IMAGE = "${ECR_REGISTRY}/bookingservice:$BUILD_NUMBER"
+                            sh "docker build -t ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER} ./bookingservice"
+                            sh "docker tag ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER} ${ECR_REGISTRY}/bookingservice:latest"
                         }
                     }
                 }
                 stage('Build Inventory Service Image') {
-                    agent {
-                        docker {
-                            image 'docker:latest'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         script {
                             sh 'mkdir -p /tmp/.docker'
-                            def inventoryImage = docker.build("${ECR_REGISTRY}/inventoryservice:$BUILD_NUMBER", "./inventoryservice")
-                            env.INVENTORY_IMAGE = "${ECR_REGISTRY}/inventoryservice:$BUILD_NUMBER"
+                            sh "docker build -t ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER} ./inventoryservice"
+                            sh "docker tag ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER} ${ECR_REGISTRY}/inventoryservice:latest"
                         }
                     }
                 }
                 stage('Build Order Service Image') {
-                    agent {
-                        docker {
-                            image 'docker:latest'
-                            args '-v /var/run/docker.sock:/var/run/docker.sock'
-                        }
-                    }
                     steps {
                         script {
                             sh 'mkdir -p /tmp/.docker'
-                            def orderImage = docker.build("${ECR_REGISTRY}/orderservice:$BUILD_NUMBER", "./orderservice")
-                            env.ORDER_IMAGE = "${ECR_REGISTRY}/orderservice:$BUILD_NUMBER"
+                            sh "docker build -t ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER} ./orderservice"
+                            sh "docker tag ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER} ${ECR_REGISTRY}/orderservice:latest"
                         }
                     }
                 }
@@ -143,28 +96,23 @@ pipeline {
         }
 
         stage('Push Docker Images to ECR') {
-            agent {
-                docker {
-                    image 'docker:latest'
-                    args '-v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
             steps {
                 script {
-                    docker.withRegistry("https://${ECR_REGISTRY}", registryCreds) {
-                        // Push all service images
-                        docker.image("${ECR_REGISTRY}/apigateway:$BUILD_NUMBER").push("$BUILD_NUMBER")
-                        docker.image("${ECR_REGISTRY}/apigateway:$BUILD_NUMBER").push('latest')
+                    // Login to ECR
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
 
-                        docker.image("${ECR_REGISTRY}/bookingservice:$BUILD_NUMBER").push("$BUILD_NUMBER")
-                        docker.image("${ECR_REGISTRY}/bookingservice:$BUILD_NUMBER").push('latest')
+                    // Push all images
+                    sh "docker push ${ECR_REGISTRY}/apigateway:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/apigateway:latest"
 
-                        docker.image("${ECR_REGISTRY}/inventoryservice:$BUILD_NUMBER").push("$BUILD_NUMBER")
-                        docker.image("${ECR_REGISTRY}/inventoryservice:$BUILD_NUMBER").push('latest')
+                    sh "docker push ${ECR_REGISTRY}/bookingservice:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/bookingservice:latest"
 
-                        docker.image("${ECR_REGISTRY}/orderservice:$BUILD_NUMBER").push("$BUILD_NUMBER")
-                        docker.image("${ECR_REGISTRY}/orderservice:$BUILD_NUMBER").push('latest')
-                    }
+                    sh "docker push ${ECR_REGISTRY}/inventoryservice:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/inventoryservice:latest"
+
+                    sh "docker push ${ECR_REGISTRY}/orderservice:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_REGISTRY}/orderservice:latest"
                 }
             }
         }

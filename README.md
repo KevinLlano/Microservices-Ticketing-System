@@ -343,8 +343,13 @@ Implementing reliable Kafka event publishing/consumption and REST client calls (
 Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
 
 
-
-
+### ⚠️ Jenkins Pipeline
+Step1. To set up a Jenkins pipeline for this microservice architecture, create a `Jenkinsfile` in the root directory
+Step2. Define stages for building, testing, and deploying each service
+Step3. Use Docker desktop to be able to start Jenkins use command `docker run -p 8080:8080 jenkins/jenkins:lts`
+Step4. Access Jenkins at `http://localhost:8080` and configure the pipeline to use the `Jenkinsfile` 
+step5. Configuration should include plugins for Docker, ECR and AWS Steps 
+step5. Ensure each service has its own Dockerfile for building images before pushing to a container registry like Docker Hub or AWS ECR or running the jenkins pipeline
 
 
 

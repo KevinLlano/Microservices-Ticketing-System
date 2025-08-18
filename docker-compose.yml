@@ -98,7 +98,9 @@ services:
 
   jenkins:
     container_name: jenkins
-    image: jenkins/jenkins:lts
+    build:
+      context: .
+      dockerfile: jenkins.Dockerfile
     restart: always
     ports:
       - "8081:8080"
@@ -109,7 +111,6 @@ services:
       - ./:/workspace
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
-    user: root
 
 volumes:
   db-data:
