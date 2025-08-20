@@ -46,6 +46,11 @@ pipeline {
                     steps { dir('orderservice'){ sh './mvnw -B clean package -DskipTests' } }
                 }
             }
+            post {
+                success {
+                    archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+                }
+            }
         }
 
         stage('Build Docker Images (local only)') {
@@ -70,9 +75,6 @@ pipeline {
     }
 
     post {
-        success {
-            archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
-        }
         always { cleanWs() }
     }
 }
