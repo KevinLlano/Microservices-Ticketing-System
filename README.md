@@ -50,48 +50,48 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
 
 ## 🚀 Features
 
-- ✅ Event & Venue Inventory Management  
-- ✅ Real-time Booking Validation  
-- ✅ Kafka-Powered Order Processing  
-- ✅ API Gateway Routing with OAuth2 Security  
-- ✅ Dockerized Environment with Isolated Services  
+- ✅ Event & Venue Inventory Management
+- ✅ Real-time Booking Validation
+- ✅ Kafka-Powered Order Processing
+- ✅ API Gateway Routing with OAuth2 Security
+- ✅ Dockerized Environment with Isolated Services
 
 ---
 
 ### Setup & Installation
 
-1. **Clone the Repository**  
+1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/inventory-booking-service.git  
+   git clone https://github.com/yourusername/inventory-booking-service.git
    cd inventory-booking-service
    ```
 
-2. **Start Docker Services**  
+2. **Start Docker Services**
    ```bash
    docker-compose up -d
    ```
 
-3. **Configure Application Properties**  
+3. **Configure Application Properties**
    - Update `src/main/resources/application.properties` with MySQL and Kafka settings.
 
-4. **Run the Services**  
-   Navigate to each service directory and run:  
+4. **Run the Services**
+   Navigate to each service directory and run:
    ```bash
    mvn spring-boot:run
-   ```  
-   Run in this order:  
-   - `inventoryservice`  
-   - `bookingservice`  
-   - `orderservice`  
+   ```
+   Run in this order:
+   - `inventoryservice`
+   - `bookingservice`
+   - `orderservice`
    - `apigateway`
 
-5. **Test APIs**  
-   - **Inventory Service**:  
-     - `http://localhost:8080/api/v1/inventory/venue/1`  
-     - `http://localhost:8080/api/v1/inventory/events`  
-   - **Booking Service**:  
-     - `http://localhost:8081/api/v1/booking`  
-     - Example POST data:  
+5. **Test APIs**
+   - **Inventory Service**:
+     - `http://localhost:8080/api/v1/inventory/venue/1`
+     - `http://localhost:8080/api/v1/inventory/events`
+   - **Booking Service**:
+     - `http://localhost:8081/api/v1/booking`
+     - Example POST data:
        ```json
        {
          "userId": 1,
@@ -100,7 +100,7 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
        }
        ```
 
-6. **Stop Services**  
+6. **Stop Services**
    ```bash
    docker-compose down
    ```
@@ -330,42 +330,90 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
 
 ### ⚠️ Technical Challenges
 
-#### 1. Microservice Coordination  
+#### 1. Microservice Coordination
 Running multiple Spring Boot apps alongside Kafka, MySQL, and Keycloak in Docker Compose requires careful orchestration and port management.
 
-#### 2. Flyway Migration Conflicts  
+#### 2. Flyway Migration Conflicts
 Schema versioning across services can lead to `flyway_schema_history` conflicts, especially during parallel development or rollback scenarios.
 
-#### 3. Inter-Service Communication  
+#### 3. Inter-Service Communication
 Implementing reliable Kafka event publishing/consumption and REST client calls (e.g., `InventoryServiceClient`) introduces serialization and network concerns.
 
-#### 4. Security Integration  
+#### 4. Security Integration
 Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
 
-### ⚠️ Jenkins pipeline not reading Docker plugin
-Make sure all plugins and permissions for the user path are set correctly, and ensure that the build is the same as the local build. To reduce errors, don’t set up ECR/ECS yet. add Chmod permission to pipeline user to be able to read docker and run docker commands. like jekins user to docker group. give docker the user: root. 
+### ⚠️ CI/CD (Jenkins) – Issues Encountered & Resolutions
+Problems faced while bringing up a local Jenkins pipeline for these services and how they were solved:
 
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| Jenkins home volume permissions | Repeating `Permission denied` writing `copy_reference_file.log` | Recreate container & ensure host dir owned by uid 1000 (or run container as root for local dev): `chown -R 1000:1000 jenkins-data` or add `user: root` temporarily. |
+| Docker socket permission | `permission denied while trying to connect to the Docker daemon socket` | Add Jenkins user to docker group in custom Jenkins image or run with `-v /var/run/docker.sock:/var/run/docker.sock` plus `groupadd -for docker && usermod -aG docker jenkins`. For quickest local test run container as root. |
+| `mvnw: Permission denied` | Build stage exit code 126 | Commit executable flag: `git update-index --chmod=+x */mvnw` (Windows users may need `wsl` or manual chmod in container). |
+| Missing artifacts to archive | Post stage error: `No artifacts found '**/target/*.jar'` | Ensure build not cleaned before archiving. Move `archiveArtifacts` before `cleanWs` or remove workspace wipe. |
+| Workspace not a Git repo after restart | `fatal: not in a git directory` | Wipe workspace (`Workspace -> Wipe out`) then rebuild so Jenkins re-clones. |
+| Duplicate step numbering / unclear pipeline doc | Hard to follow | Consolidated clear 1..12 replication steps below. |
+| Early ECR/ECS integration noise | Auth / login failures | Defer cloud push until local pipeline (build + local image build) is green. |
 
-### ⚠️ Jenkins Pipeline
-Step1. To set up a Jenkins pipeline for this microservice architecture, create a `Jenkinsfile` in the root directory
-Step2. Define stages for building, testing, and deploying each service
-Step3. Use Docker desktop to be able to start Jenkins use command `docker run -p 8080:8080 jenkins/jenkins:lts`
-Step4. Access Jenkins at `http://localhost:8080` and configure the pipeline to use the `Jenkinsfile` 
-step5. Configuration should include plugins for Docker, ECR and AWS Steps 
-step5. Ensure each service has its own Dockerfile for building images before pushing to a container registry like Docker Hub or AWS ECR or running the jenkins pipeline
+### Jenkins Local Pipeline – Quick Replication Steps
+1. Build / rebuild Jenkins (custom image if adding docker group) and start only Jenkins: `docker compose up -d jenkins` (or `docker run -d -p 8080:8080 -v jenkins-data:/var/jenkins_home -v /var/run/docker.sock:/var/run/docker.sock --name jenkins jenkins/jenkins:lts`)
+2. Get initial password: `docker exec -it jenkins cat /var/jenkins_home/secrets/initialAdminPassword` and finish setup (Suggested plugins + Docker + Pipeline + Git + Credentials + Workspace Cleanup optional).
+3. Fix Docker access (choose one):
+   - Preferred: custom Dockerfile adding Jenkins user to docker group.
+   - Fast: run container as root (local only).
+4. Ensure `mvnw` scripts executable (inside repo root): `git update-index --chmod=+x apigateway/mvnw bookingservice/mvnw inventoryservice/mvnw orderservice/mvnw && git commit -m "chmod mvnw" && git push`.
+5. Create Multibranch or Pipeline job pointing to repo (Jenkinsfile at root).
+6. Run build. Verify stages: Checkout -> Build JARs (parallel) -> (optional) Build Docker Images.
+7. If Docker build fails with socket permission denied, apply step 3 fix then rebuild.
+8. If artifact archiving needed: place `archiveArtifacts artifacts: '**/target/*.jar'` BEFORE any workspace cleanup; or remove `cleanWs` post step.
+9. To reset stuck workspace: Wipe via UI or `docker exec -it jenkins bash -lc 'rm -rf /var/jenkins_home/workspace/Jenkinspipe*'` then rebuild.
+10. Tag & build images locally only (increment a BUILD_NUMBER env var or use Jenkins `${BUILD_NUMBER}`).
+11. After success, introduce ECR: create repo, add AWS creds in Jenkins, then add a push stage (login via `aws ecr get-login-password | docker login ...`).
+12. Later extend with Terraform (ECR, ECS Cluster, Fargate Service) once images push reliably.
 
+### Notes
+- Defer ECS until local CI is stable.
+- Keep Dockerfile per service minimal (multi-stage build recommended for production).
+- Avoid cleaning workspace before archiving deliverables.
+- Windows host users: line endings and execute bit require attention; prefer committing from WSL or enabling core.autocrlf=false.
 
+### Minimal Jenkinsfile Pattern (Local Build Only)
+```
+pipeline {
+  agent any
+  stages {
+    stage('Build JARs') {
+      parallel {
+        stage('apigateway'){ steps { dir('apigateway'){ sh './mvnw -B clean package -DskipTests' } } }
+        stage('bookingservice'){ steps { dir('bookingservice'){ sh './mvnw -B clean package -DskipTests' } } }
+        stage('inventoryservice'){ steps { dir('inventoryservice'){ sh './mvnw -B clean package -DskipTests' } } }
+        stage('orderservice'){ steps { dir('orderservice'){ sh './mvnw -B clean package -DskipTests' } } }
+      }
+    }
+    stage('Build Images (local)') {
+      parallel {
+        stage('apigateway image'){ steps { dir('apigateway'){ sh 'docker build -t apigateway:${BUILD_NUMBER} .' } } }
+        stage('bookingservice image'){ steps { dir('bookingservice'){ sh 'docker build -t bookingservice:${BUILD_NUMBER} .' } } }
+        stage('inventoryservice image'){ steps { dir('inventoryservice'){ sh 'docker build -t inventoryservice:${BUILD_NUMBER} .' } } }
+        stage('orderservice image'){ steps { dir('orderservice'){ sh 'docker build -t orderservice:${BUILD_NUMBER} .' } } }
+      }
+    }
+  }
+  post {
+    success {
+      archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+    }
+    cleanup {
+      // Optional: cleanWs()  // enable only if not archiving or archive first
+    }
+  }
+}
+```
 
+---
 
-
-
-
-
-
-
-
-
-
+![img_7.png](img_7.png)
+![img_6.png](img_6.png)
 ![img_4.png](img_4.png)
 ![img.png](img.png)
 ![img_5.png](img_5.png)
