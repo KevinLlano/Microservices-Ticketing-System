@@ -91,3 +91,6 @@ tmp/
 *.bak
 *.backup
 *~
+
+# Terraform configuration files (exclude from repo)
+terraform/*.tf

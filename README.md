@@ -342,6 +342,9 @@ Implementing reliable Kafka event publishing/consumption and REST client calls (
 #### 4. Security Integration  
 Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
 
+### ⚠️ Jenkins pipeline not reading Docker plugin
+Make sure all plugins and permissions for the user path are set correctly, and ensure that the build is the same as the local build. To reduce errors, don’t set up ECR/ECS yet. add Chmod permission to pipeline user to be able to read docker and run docker commands. like jekins user to docker group. give docker the user: root. 
+
 
 ### ⚠️ Jenkins Pipeline
 Step1. To set up a Jenkins pipeline for this microservice architecture, create a `Jenkinsfile` in the root directory

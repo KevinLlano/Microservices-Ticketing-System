@@ -16,6 +16,14 @@ pipeline {
             steps { checkout scm }
         }
 
+        stage('Prep') {
+            steps {
+                sh 'chmod +x apigateway/mvnw bookingservice/mvnw inventoryservice/mvnw orderservice/mvnw || true'
+                sh 'sed -i "s/\r$//" apigateway/mvnw bookingservice/mvnw inventoryservice/mvnw orderservice/mvnw || true'
+                sh 'echo "Prep done"'
+            }
+        }
+
         stage('Verify Docker') {
             steps {
                 sh 'docker --version'
