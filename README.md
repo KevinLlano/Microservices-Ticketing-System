@@ -328,7 +328,7 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
     * `http://localhost:8090/api/v1/booking`
     * `http://localhost:8090/api/v1/inventory/event/1`
 
-### ⚠️ Technical Challenges
+### ⚠️ Application Technical Challenges
 
 #### 1. Microservice Coordination
 Running multiple Spring Boot apps alongside Kafka, MySQL, and Keycloak in Docker Compose requires careful orchestration and port management.
@@ -343,7 +343,6 @@ Implementing reliable Kafka event publishing/consumption and REST client calls (
 Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
 
 ### ⚠️ CI/CD (Jenkins) – Issues Encountered & Resolutions
-Problems faced while bringing up a local Jenkins pipeline for these services and how they were solved:
 
 | Issue | Symptom | Fix |
 |-------|---------|-----|
@@ -352,7 +351,6 @@ Problems faced while bringing up a local Jenkins pipeline for these services and
 | `mvnw: Permission denied` | Build stage exit code 126 | Commit executable flag: `git update-index --chmod=+x */mvnw` (Windows users may need `wsl` or manual chmod in container). |
 | Missing artifacts to archive | Post stage error: `No artifacts found '**/target/*.jar'` | Ensure build not cleaned before archiving. Move `archiveArtifacts` before `cleanWs` or remove workspace wipe. |
 | Workspace not a Git repo after restart | `fatal: not in a git directory` | Wipe workspace (`Workspace -> Wipe out`) then rebuild so Jenkins re-clones. |
-| Duplicate step numbering / unclear pipeline doc | Hard to follow | Consolidated clear 1..12 replication steps below. |
 | Early ECR/ECS integration noise | Auth / login failures | Defer cloud push until local pipeline (build + local image build) is green. |
 
 ### Jenkins Local Pipeline – Quick Replication Steps
@@ -377,7 +375,7 @@ Problems faced while bringing up a local Jenkins pipeline for these services and
 - Avoid cleaning workspace before archiving deliverables.
 - Windows host users: line endings and execute bit require attention; prefer committing from WSL or enabling core.autocrlf=false.
 
-### Minimal Jenkinsfile Pattern (Local Build Only)
+### Minimal Jenkinsfile Pattern DEMO purposes (Local Build Only) 
 ```
 pipeline {
   agent any
