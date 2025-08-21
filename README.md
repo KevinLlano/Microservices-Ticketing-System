@@ -408,13 +408,81 @@ pipeline {
 }
 ```
 
----
+### ⚠️ AWS Cloud Deployment (ECR/ECS) – Additional Challenges & Solutions
 
+Problems encountered during AWS ECR/ECS deployment and their resolutions:
+
+| Issue | Symptom | Root Cause | Fix |
+|-------|---------|------------|-----|
+| Docker image not found in ECR | `CannotPullContainerError: pull image manifest has been retried 1 time(s): failed to resolve ref` | Image was never pushed to ECR repository | Build JAR → Build Docker image → Authenticate with ECR → Tag image → Push to ECR |
+| Java runtime version mismatch | `UnsupportedClassVersionError: class file version 65.0, this version only recognizes up to 61.0` | Application compiled with Java 21 but Dockerfile used OpenJDK 17 | Update Dockerfile base image from `openjdk:17-jdk-slim` to `openjdk:21-jdk-slim` |
+| Container port mismatch | ECS task fails health checks, exits with code 1 | Dockerfile exposes port 8080 but Spring Boot configured for 8090 | Align ports: either change `server.port=8080` in application.properties OR update ECS task definition containerPort |
+| Keycloak localhost dependency | Application startup failures in ECS | JWT issuer URI points to `localhost:8091` which doesn't exist in cloud | Comment out Keycloak configuration for initial cloud deployment or point to external auth service |
+| Configuration syntax errors | Spring Boot startup fails with property parsing errors | Typo in `spring.security.oauth2.resourceserver.jwt,issuer-uri` (comma instead of dot) | Fix property key: `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+
+### AWS ECR/ECS Deployment Guide
+
+#### Prerequisites
+1. **AWS CLI configured** with credentials:
+   ```bash
+   aws configure
+   # Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output format (json)
+   ```
+
+2. **Terraform infrastructure deployed** (ECR repository + ECS cluster + task definition + service)
+
+#### Deployment Steps
+
+1. **Build Application JAR**
+   ```bash
+   cd apigateway
+   ./mvnw clean package -DskipTests
+   ```
+
+2. **Build Docker Image**
+   ```bash
+   docker build -t microservices-apigateway:latest .
+   ```
+
+3. **Authenticate Docker with ECR**
+   ```bash
+   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+   ```
+
+4. **Tag Image for ECR**
+   ```bash
+   docker tag microservices-apigateway:latest <account-id>.dkr.ecr.us-east-1.amazonaws.com/microservices-apigateway:latest
+   ```
+
+5. **Push Image to ECR**
+   ```bash
+   docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/microservices-apigateway:latest
+   ```
+
+6. **Verify ECS Deployment**
+    - AWS Console → ECS → Clusters → microservices-cluster → Services → apigateway-service
+    - Check task status: should show "RUNNING"
+    - Get public IP from task details
+    - Test endpoint: `http://<public-ip>:8080/actuator/health`
+
+#### Cost Optimization Notes
+- **Estimated Monthly Cost**: $8-13/month for single service (256 CPU, 512MB RAM, 24/7)
+- **Cost-saving strategies**:
+    - Scale to 0 when not needed: `aws ecs update-service --cluster microservices-cluster --service apigateway-service --desired-count 0`
+    - Use spot instances for development
+    - Set CloudWatch log retention to 1 day
+    - Use default VPC (no NAT Gateway costs)
+
+#### Troubleshooting
+- **Task keeps stopping**: Check CloudWatch logs at `/ecs/apigateway`
+- **Can't access application**: Verify security group allows inbound port 8080
+
+### ⚠️ Screenshots
 ![img_7.png](img_7.png)
 ![img_6.png](img_6.png)
-![img_4.png](img_4.png)
-![img.png](img.png)
 ![img_5.png](img_5.png)
-![img_1.png](img_1.png)
-![img_2.png](img_2.png)
+![img_4.png](img_4.png)
 ![img_3.png](img_3.png)
+![img_2.png](img_2.png)
+![img_1.png](img_1.png)
+![img.png](img.png)
