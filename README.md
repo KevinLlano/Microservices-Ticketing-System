@@ -473,13 +473,12 @@ Problems encountered during AWS ECR/ECS deployment and their resolutions:
     - Set CloudWatch log retention to 1 day
     - Use default VPC (no NAT Gateway costs)
 
-#### Troubleshooting
-- **Task keeps stopping**: Check CloudWatch logs at `/ecs/apigateway`
-- **Can't access application**: Verify security group allows inbound port 8080
-
 ### ⚠️ Screenshots
 ![img_7.png](img_7.png)
 ![img_6.png](img_6.png)
+![img_9.png](img_9.png)
+![img_10.png](img_10.png)
+![img_8.png](img_8.png)
 ![img_5.png](img_5.png)
 ![img_4.png](img_4.png)
 ![img_3.png](img_3.png)
