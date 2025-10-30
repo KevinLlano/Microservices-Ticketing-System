@@ -1,5 +1,7 @@
 # **Microservice3** ![Java](https://img.icons8.com/color/48/000000/java-coffee-cup-logo.png)
 
+> ⚠️ **Security Note:** `application.properties` and `docker-compose.yml` contain credentials and are gitignored. Configure these files locally with your own passwords before running.
+
 ## 📖 Overview
 
 **Microservice3** is a ticketing system built with a microservices architecture using Spring Boot. It includes four core services: Inventory, Booking, Order, and an API Gateway. Each service communicates through REST APIs and Kafka for event-driven operations. Keycloak handles authentication, and all components are containerized using Docker and orchestrated with Docker Compose.
@@ -55,24 +57,44 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
 - ✅ Kafka-Powered Order Processing
 - ✅ API Gateway Routing with OAuth2 Security
 - ✅ Dockerized Environment with Isolated Services
+- ✅ Jenkins CI/CD Pipeline
+- ✅ Prometheus & Grafana Monitoring
 
 ---
 
-### Setup & Installation
+## 🔒 Security Practices
+
+**Sensitive files are gitignored** to prevent credential exposure:
+- `docker-compose.yml` - Database and service passwords
+- `application.properties` - Database credentials and API configurations
+- `terraform.tfstate` - Infrastructure state
+- `volume-data/` - Database volumes
+
+**To run locally:** Configure these files with your own credentials. See setup instructions below.
+
+---
+
+## START HERE: Quick Setup Guide
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/inventory-booking-service.git
-   cd inventory-booking-service
+   git clone https://github.com/yourusername/microservice3.git
+   cd microservice3
    ```
 
-2. **Start Docker Services**
+2. **Configure Credentials**
+   
+   Update passwords in:
+   - `docker-compose.yml` - MySQL, Keycloak, Grafana passwords
+   - `inventoryservice/src/main/resources/application.properties`
+   - `bookingservice/src/main/resources/application.properties`
+   - `orderservice/src/main/resources/application.properties`
+
+3. **Start Docker Services**
    ```bash
    docker-compose up -d
    ```
 
-3. **Configure Application Properties**
-   - Update `src/main/resources/application.properties` with MySQL and Kafka settings.
 
 4. **Run the Services**
    Navigate to each service directory and run:
@@ -104,6 +126,10 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
    ```bash
    docker-compose down
    ```
+
+---
+
+## 📋 DO IT YOURSELF: Step-by-Step Guide
 
 ### **INVENTORY SERVICE**
 
@@ -328,30 +354,34 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
     * `http://localhost:8090/api/v1/booking`
     * `http://localhost:8090/api/v1/inventory/event/1`
 
-### ⚠️ Application Technical Challenges
+---
 
-#### 1. Microservice Coordination
-Running multiple Spring Boot apps alongside Kafka, MySQL, and Keycloak in Docker Compose requires careful orchestration and port management.
+## 📊 Monitoring (Prometheus & Grafana)
 
-#### 2. Flyway Migration Conflicts
-Schema versioning across services can lead to `flyway_schema_history` conflicts, especially during parallel development or rollback scenarios.
+All services expose Prometheus metrics at `/actuator/prometheus`.
 
-#### 3. Inter-Service Communication
-Implementing reliable Kafka event publishing/consumption and REST client calls (e.g., `InventoryServiceClient`) introduces serialization and network concerns.
+**Access:**
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (admin/admin)
 
-#### 4. Security Integration
-Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
+**Grafana Setup:**
+1. Add Prometheus data source: `http://prometheus:9090`
+2. Import Spring Boot dashboard (ID 4701)
+3. Monitor JVM metrics, HTTP requests, database connections
 
-### ⚠️ CI/CD (Jenkins) – Issues Encountered & Resolutions
+---
 
-| Issue | Symptom | Fix |
-|-------|---------|-----|
-| Jenkins home volume permissions | Repeating `Permission denied` writing `copy_reference_file.log` | Recreate container & ensure host dir owned by uid 1000 (or run container as root for local dev): `chown -R 1000:1000 jenkins-data` or add `user: root` temporarily. |
-| Docker socket permission | `permission denied while trying to connect to the Docker daemon socket` | Add Jenkins user to docker group in custom Jenkins image or run with `-v /var/run/docker.sock:/var/run/docker.sock` plus `groupadd -for docker && usermod -aG docker jenkins`. For quickest local test run container as root. |
-| `mvnw: Permission denied` | Build stage exit code 126 | Commit executable flag: `git update-index --chmod=+x */mvnw` (Windows users may need `wsl` or manual chmod in container). |
-| Missing artifacts to archive | Post stage error: `No artifacts found '**/target/*.jar'` | Ensure build not cleaned before archiving. Move `archiveArtifacts` before `cleanWs` or remove workspace wipe. |
-| Workspace not a Git repo after restart | `fatal: not in a git directory` | Wipe workspace (`Workspace -> Wipe out`) then rebuild so Jenkins re-clones. |
-| Early ECR/ECS integration noise | Auth / login failures | Defer cloud push until local pipeline (build + local image build) is green. |
+## 🔄 CI/CD (Jenkins)
+
+Jenkins pipeline builds all services and creates Docker images.
+
+**Access:** `http://localhost:8081`
+
+**Pipeline stages:**
+- Checkout - Clone repository
+- Build JARs - Maven package all services
+- Build Docker Images - Tag with build number
+- (Optional) Push to ECR for cloud deployment
 
 ### Jenkins Local Pipeline – Quick Replication Steps
 1. Build / rebuild Jenkins (custom image if adding docker group) and start only Jenkins: `docker compose up -d jenkins` (or `docker run -d -p 8080:8080 -v jenkins-data:/var/jenkins_home -v /var/run/docker.sock:/var/run/docker.sock --name jenkins jenkins/jenkins:lts`)
@@ -408,21 +438,11 @@ pipeline {
 }
 ```
 
-### ⚠️ AWS Cloud Deployment (ECR/ECS) – Additional Challenges & Solutions
+---
 
-Problems encountered during AWS ECR/ECS deployment and their resolutions:
+## ☁️ AWS Cloud Deployment (ECR/ECS)
 
-| Issue | Symptom | Root Cause | Fix |
-|-------|---------|------------|-----|
-| Docker image not found in ECR | `CannotPullContainerError: pull image manifest has been retried 1 time(s): failed to resolve ref` | Image was never pushed to ECR repository | Build JAR → Build Docker image → Authenticate with ECR → Tag image → Push to ECR |
-| Java runtime version mismatch | `UnsupportedClassVersionError: class file version 65.0, this version only recognizes up to 61.0` | Application compiled with Java 21 but Dockerfile used OpenJDK 17 | Update Dockerfile base image from `openjdk:17-jdk-slim` to `openjdk:21-jdk-slim` |
-| Container port mismatch | ECS task fails health checks, exits with code 1 | Dockerfile exposes port 8080 but Spring Boot configured for 8090 | Align ports: either change `server.port=8080` in application.properties OR update ECS task definition containerPort |
-| Keycloak localhost dependency | Application startup failures in ECS | JWT issuer URI points to `localhost:8091` which doesn't exist in cloud | Comment out Keycloak configuration for initial cloud deployment or point to external auth service |
-| Configuration syntax errors | Spring Boot startup fails with property parsing errors | Typo in `spring.security.oauth2.resourceserver.jwt,issuer-uri` (comma instead of dot) | Fix property key: `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
-
-### AWS ECR/ECS Deployment Guide
-
-#### Prerequisites
+### Prerequisites
 1. **AWS CLI configured** with credentials:
    ```bash
    aws configure
@@ -431,7 +451,7 @@ Problems encountered during AWS ECR/ECS deployment and their resolutions:
 
 2. **Terraform infrastructure deployed** (ECR repository + ECS cluster + task definition + service)
 
-#### Deployment Steps
+### Deployment Steps
 
 1. **Build Application JAR**
    ```bash
@@ -465,7 +485,7 @@ Problems encountered during AWS ECR/ECS deployment and their resolutions:
     - Get public IP from task details
     - Test endpoint: `http://<public-ip>:8080/actuator/health`
 
-#### Cost Optimization Notes
+### Cost Optimization Notes
 - **Estimated Monthly Cost**: $8-13/month for single service (256 CPU, 512MB RAM, 24/7)
 - **Cost-saving strategies**:
     - Scale to 0 when not needed: `aws ecs update-service --cluster microservices-cluster --service apigateway-service --desired-count 0`
@@ -473,7 +493,48 @@ Problems encountered during AWS ECR/ECS deployment and their resolutions:
     - Set CloudWatch log retention to 1 day
     - Use default VPC (no NAT Gateway costs)
 
-### ⚠️ Screenshots
+---
+
+## ⚠️ Technical Challenges & Solutions
+
+### Application Challenges
+
+#### 1. Microservice Coordination
+Running multiple Spring Boot apps alongside Kafka, MySQL, and Keycloak in Docker Compose requires careful orchestration and port management.
+
+#### 2. Flyway Migration Conflicts
+Schema versioning across services can lead to `flyway_schema_history` conflicts, especially during parallel development or rollback scenarios.
+
+#### 3. Inter-Service Communication
+Implementing reliable Kafka event publishing/consumption and REST client calls (e.g., `InventoryServiceClient`) introduces serialization and network concerns.
+
+#### 4. Security Integration
+Configuring Keycloak with Spring Security and OAuth2 Resource Server in the API Gateway involves precise token validation and role mapping.
+
+### CI/CD (Jenkins) – Issues Encountered & Resolutions
+
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| Jenkins home volume permissions | Repeating `Permission denied` writing `copy_reference_file.log` | Recreate container & ensure host dir owned by uid 1000 (or run container as root for local dev): `chown -R 1000:1000 jenkins-data` or add `user: root` temporarily. |
+| Docker socket permission | `permission denied while trying to connect to the Docker daemon socket` | Add Jenkins user to docker group in custom Jenkins image or run with `-v /var/run/docker.sock:/var/run/docker.sock` plus `groupadd -for docker && usermod -aG docker jenkins`. For quickest local test run container as root. |
+| `mvnw: Permission denied` | Build stage exit code 126 | Commit executable flag: `git update-index --chmod=+x */mvnw` (Windows users may need `wsl` or manual chmod in container). |
+| Missing artifacts to archive | Post stage error: `No artifacts found '**/target/*.jar'` | Ensure build not cleaned before archiving. Move `archiveArtifacts` before `cleanWs` or remove workspace wipe. |
+| Workspace not a Git repo after restart | `fatal: not in a git directory` | Wipe workspace (`Workspace -> Wipe out`) then rebuild so Jenkins re-clones. |
+| Early ECR/ECS integration noise | Auth / login failures | Defer cloud push until local pipeline (build + local image build) is green. |
+
+### AWS Cloud Deployment – Issues Encountered & Resolutions
+
+| Issue | Symptom | Root Cause | Fix |
+|-------|---------|------------|-----|
+| Docker image not found in ECR | `CannotPullContainerError: pull image manifest has been retried 1 time(s): failed to resolve ref` | Image was never pushed to ECR repository | Build JAR → Build Docker image → Authenticate with ECR → Tag image → Push to ECR |
+| Java runtime version mismatch | `UnsupportedClassVersionError: class file version 65.0, this version only recognizes up to 61.0` | Application compiled with Java 21 but Dockerfile used OpenJDK 17 | Update Dockerfile base image from `openjdk:17-jdk-slim` to `openjdk:21-jdk-slim` |
+| Container port mismatch | ECS task fails health checks, exits with code 1 | Dockerfile exposes port 8080 but Spring Boot configured for 8090 | Align ports: either change `server.port=8080` in application.properties OR update ECS task definition containerPort |
+| Keycloak localhost dependency | Application startup failures in ECS | JWT issuer URI points to `localhost:8091` which doesn't exist in cloud | Comment out Keycloak configuration for initial cloud deployment or point to external auth service |
+| Configuration syntax errors | Spring Boot startup fails with property parsing errors | Typo in `spring.security.oauth2.resourceserver.jwt,issuer-uri` (comma instead of dot) | Fix property key: `spring.security.oauth2.resourceserver.jwt.issuer-uri` |
+
+---
+
+## 📸 Screenshots
 ![img_7.png](img_7.png)
 ![img_6.png](img_6.png)
 ![img_9.png](img_9.png)

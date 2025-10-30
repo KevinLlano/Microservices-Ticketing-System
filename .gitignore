@@ -1,47 +1,22 @@
-# Volume data directories
-volume-data/
+# Sensitive configuration files (DO NOT COMMIT)
+docker-compose.yml
+**/application.properties
 
-# Jenkins data and configuration
+# Volume data and runtime files
+volume-data/
 jenkins-data/
 
-# Docker volumes and containers
-docker-volumes/
-.docker/
-
-# AWS and Terraform sensitive files
+# AWS and Terraform
 *.tfstate
 *.tfstate.*
 *.tfvars
 .terraform/
-.terraform.lock.hcl
 terraform.tfstate.backup
-crash.log
-crash.*.log
-
-# AWS credentials and config
-.aws/
-aws-credentials
-*.pem
-*.key
 
 # Environment variables and secrets
 .env
-.env.local
-.env.production
-.env.staging
-*.secrets
-secrets.yml
-secrets.yaml
-
-# Database passwords and connection strings
-application-*.properties
-application-*.yml
-database.properties
-
-# Jenkins and CI/CD secrets
-jenkins_home/
-.jenkins/
-credentials.xml
+*.pem
+*.key
 
 # IDE and editor files
 .vscode/
@@ -91,6 +66,3 @@ tmp/
 *.bak
 *.backup
 *~
-
-# Terraform configuration files (exclude from repo)
-terraform/*.tf

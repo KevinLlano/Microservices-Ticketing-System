@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'inventoryservice'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['inventoryservice:8080']
+
+  - job_name: 'bookingservice'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['bookingservice:8081']
+
+  - job_name: 'orderservice'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['orderservice:8082']
+
+  - job_name: 'apigateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['apigateway:8090']

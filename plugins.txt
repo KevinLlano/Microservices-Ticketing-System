@@ -1,10 +1,2 @@
-blueocean
-docker-workflow
-git
-workflow-aggregator
-amazon-ecr
-aws-credentials
-pipeline-aws
-maven-plugin
-junit
+
 
