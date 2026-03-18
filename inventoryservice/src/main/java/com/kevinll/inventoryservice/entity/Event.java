@@ -5,13 +5,11 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.math.BigDecimal;
 
 @Entity
 @Getter
-@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Table(name = "event")
@@ -35,4 +33,10 @@ public class Event {
 
     @Column(name = "ticket_price")
     private BigDecimal ticketPrice;
+
+    // No setters unless required by JPA or business logic.
+
+    public void setLeftCapacity(Long leftCapacity) {
+        this.leftCapacity = leftCapacity;
+    }
 }

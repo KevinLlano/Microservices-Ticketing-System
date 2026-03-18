@@ -8,27 +8,27 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Getter
-@Setter
 @AllArgsConstructor
-@NoArgsConstructor
+@NoArgsConstructor(force = true)
 @Table(name = "venue")
 public class Venue {
 
     @Id
     @Column(name = "id")
-    private Long id;
+    private final Long id;
 
     @Column(name = "name")
-    private String name;
+    private final String name;
 
     @Column(name = "address")
-    private String address;
+    private final String address;
 
     @Column(name = "total_capacity")
-    private Long totalCapacity;
+    private final Long totalCapacity;
 
+
+    // No setters: fields are immutable. Use constructor for initialization.
 }

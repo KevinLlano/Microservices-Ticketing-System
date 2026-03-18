@@ -41,6 +41,7 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
 ### DevOps & CI/CD
 - Maven
 - Git
+- Terraform (for AWS infrastructure)
 - Jenkins (optional)
 
 ### Tools
@@ -318,7 +319,7 @@ All services are containerized with Docker and use **Apache Kafka** for asynchro
     * POST `http://localhost:8090/api/v1/booking`
 
       ```json
-      { "userId": 1, "eventId": 1, "tocketCount": 50 }
+      { "userId": 1, "eventId": 1, "ticketCount": 50 }
       ```
     * GET `http://localhost:8090/api/v1/inventory/event/1`
 
