@@ -1,7 +1,5 @@
 # **Microservice3** ![Java](https://img.icons8.com/color/48/000000/java-coffee-cup-logo.png)
 
-> ⚠️ **Security Note:** `application.properties` and `docker-compose.yml` contain credentials and are gitignored. Configure these files locally with your own passwords before running.
-
 ## 📖 Overview
 
 **Microservice3** is a ticketing system built with a microservices architecture using Spring Boot. It includes four core services: Inventory, Booking, Order, and an API Gateway. Each service communicates through REST APIs and Kafka for event-driven operations. Keycloak handles authentication, and all components are containerized using Docker and orchestrated with Docker Compose.
